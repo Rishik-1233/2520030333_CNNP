@@ -1,0 +1,96 @@
+SKILL LAB 2 – THREE-POINT PACKET CAPTURE
+Commands used (run one command at a time in Ubuntu)
+
+1. Install tools
+sudo apt update
+sudo apt install -y tshark iperf3 mtr-tiny iproute2 wireshark netcat-openbsd
+
+2. Create namespaces
+sudo ip netns add host1
+sudo ip netns add router
+sudo ip netns add host2
+sudo ip netns list
+
+3. Create virtual Ethernet pairs
+sudo ip link add veth-h1 type veth peer name veth-r1
+sudo ip link add veth-r2 type veth peer name veth-h2
+
+4. Move interfaces into namespaces
+sudo ip link set veth-h1 netns host1
+sudo ip link set veth-r1 netns router
+sudo ip link set veth-r2 netns router
+sudo ip link set veth-h2 netns host2
+
+5. Configure Host 1
+sudo ip netns exec host1 ip addr add 10.0.1.1/30 dev veth-h1
+sudo ip netns exec host1 ip link set veth-h1 up
+sudo ip netns exec host1 ip link set lo up
+
+6. Configure router
+sudo ip netns exec router ip addr add 10.0.1.2/30 dev veth-r1
+sudo ip netns exec router ip addr add 10.0.2.1/30 dev veth-r2
+sudo ip netns exec router ip link set veth-r1 up
+sudo ip netns exec router ip link set veth-r2 up
+sudo ip netns exec router ip link set lo up
+
+7. Configure Host 2
+sudo ip netns exec host2 ip addr add 10.0.2.2/30 dev veth-h2
+sudo ip netns exec host2 ip link set veth-h2 up
+sudo ip netns exec host2 ip link set lo up
+
+8. Enable routing
+sudo ip netns exec router sysctl -w net.ipv4.ip_forward=1
+sudo ip netns exec host1 ip route add 10.0.2.0/30 via 10.0.1.2
+sudo ip netns exec host2 ip route add 10.0.1.0/30 via 10.0.2.1
+
+9. Test connectivity
+sudo ip netns exec host1 ping -c 3 10.0.2.2
+
+10. Apply delay and loss
+sudo ip netns exec router tc qdisc replace dev veth-r2 root netem delay 20ms loss 1%
+sudo ip netns exec router tc qdisc show dev veth-r2
+
+11. Start captures in three separate terminals (leave running)
+sudo ip netns exec host1 tshark -i veth-h1 -w /tmp/cap1.pcap
+sudo ip netns exec router tshark -i veth-r1 -w /tmp/cap2.pcap
+sudo ip netns exec host2 tshark -i veth-h2 -w /tmp/cap3.pcap
+
+12. In another terminal, start receiver; in a fifth terminal connect sender
+sudo ip netns exec host2 nc -l 1234
+sudo ip netns exec host1 nc 10.0.2.2 1234
+
+Messages sent:
+Hello from host1!
+This is Rishik
+Three Point Capture Lab
+Message going through router
+
+13. Stop capture processes with Ctrl+C, then set permissions
+sudo chmod 644 /tmp/cap1.pcap /tmp/cap2.pcap /tmp/cap3.pcap
+ls -lh /tmp/cap1.pcap /tmp/cap2.pcap /tmp/cap3.pcap
+
+14. Directional TTL analysis
+(tshark -r /tmp/cap1.pcap -Y 'ip.src==10.0.1.1 && ip.dst==10.0.2.2' -T fields -e ip.ttl | sort | uniq -c)
+(tshark -r /tmp/cap2.pcap -Y 'ip.src==10.0.1.1 && ip.dst==10.0.2.2' -T fields -e ip.ttl | sort | uniq -c)
+(tshark -r /tmp/cap3.pcap -Y 'ip.src==10.0.1.1 && ip.dst==10.0.2.2' -T fields -e ip.ttl | sort | uniq -c)
+
+15. Extract TCP payload
+ tshark -r /tmp/cap2.pcap -Y 'tcp.port == 1234 && tcp.len > 0' -T fields -e tcp.payload | tr -d ':' | xxd -r -p
+
+16. Count TCP retransmissions
+ tshark -r /tmp/cap1.pcap -Y 'tcp.analysis.retransmission' 2>/dev/null | wc -l
+ tshark -r /tmp/cap2.pcap -Y 'tcp.analysis.retransmission' 2>/dev/null | wc -l
+ tshark -r /tmp/cap3.pcap -Y 'tcp.analysis.retransmission' 2>/dev/null | wc -l
+
+17. MTR report
+sudo ip netns exec host1 mtr --report --report-cycles 10 10.0.2.2
+
+18. Open router capture in Wireshark
+wireshark /tmp/cap2.pcap &
+Display filter: tcp.port == 1234
+
+19. Cleanup (only after copying captures and finishing evidence)
+sudo ip netns del host1
+sudo ip netns del router
+sudo ip netns del host2
+sudo ip netns list

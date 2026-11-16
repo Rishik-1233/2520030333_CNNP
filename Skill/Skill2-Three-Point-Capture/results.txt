@@ -1,0 +1,36 @@
+SKILL LAB 2 – OBSERVED RESULTS
+
+Connectivity:
+The student previously observed successful Host 1 to Host 2 ping: 3 packets transmitted, 3 received, 0% packet loss.
+
+PCAP files:
+cap1.pcap, cap2.pcap, cap3.pcap were present and each was reported as 4.4K in the student's terminal.
+
+Directional TTL (source 10.0.1.1, destination 10.0.2.2):
+cap1 / Host 1: 64 (10 packets)
+cap2 / Router: 64 (10 packets)
+cap3 / Host 2: 63 (10 packets)
+
+Extracted TCP payload:
+Hello from host1!
+This is Rishik
+Three Point Capture Lab
+Message going through router
+
+TCP retransmission counts reported:
+cap1: 0
+cap2: 0
+cap3: 0
+
+MTR report, first run (10 cycles):
+10.0.1.2: 0.0% loss, average 1.7 ms
+10.0.2.2: 10.0% loss, average 21.4 ms
+
+MTR report, later run (10 cycles):
+10.0.1.2: 0.0% loss, average 1.4 ms
+10.0.2.2: 0.0% loss, average 21.7 ms
+
+Wireshark:
+cap2.pcap opened; display filter tcp.port == 1234; packet 8 showed source 10.0.1.1, destination 10.0.2.2, TCP destination port 1234, PSH/ACK, and 18-byte payload "Hello from host1!".
+
+Note: netem loss is probabilistic. A configured 1% loss does not guarantee observed packet loss or retransmission in a short sample.
